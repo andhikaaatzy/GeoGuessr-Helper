@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌍 GeoGuessr AI Companion Pro</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+<style>
+    :root {
+        --bg-1:#0f172a; --bg-2:#1e1b4b;
+        --glass:rgba(30,41,59,0.6); --glass-border:rgba(148,163,184,0.1);
+        --text:#e2e8f0; --text-dim:#94a3b8; --text-muted:#64748b;
+        --blue:#60a5fa; --purple:#a78bfa; --pink:#f472b6;
+        --green:#34d399; --amber:#fbbf24; --red:#f87171; --indigo:#818cf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        background: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 50%, var(--bg-1) 100%);
+        min-height: 100vh; color: var(--text); padding: 1rem;
+    }
+    @media (min-width: 768px) { body { padding: 1.5rem; } }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 1rem; }
+    .header-badge {
+        display: inline-block; padding: 0.6rem; border-radius: 1rem;
+        background: var(--glass); border: 1px solid var(--glass-border); margin-bottom: 0.5rem;
+    }
+    .header h1 {
+        font-size: 2em; font-weight: 800; margin-bottom: 0.25rem;
+        background: linear-gradient(135deg, var(--blue), var(--purple), var(--pink));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    @media (min-width: 768px) { .header h1 { font-size: 2.25em; } }
+    .header p { color: var(--text-dim); font-size: 0.85em; }
+    .warn-box {
+        background: var(--glass); border: 1px solid var(--glass-border);
+        border-left: 4px solid #f59e0b; border-radius: 0.5rem;
+        padding: 0.75rem 1rem; margin-bottom: 1rem;
+        display: flex; align-items: start; gap: 0.5rem; font-size: 0.85em;
+    }
+    .grid-layout { display: grid; gap: 1.25rem; grid-template-columns: 1fr; }
+    @media (min-width: 1024px) {
+        .grid-layout { grid-template-columns: 2fr 1fr; }
+        .right-col { position: sticky; top: 1rem; align-self: start; }
+    }
+    .glass-card {
+        background: var(--glass); backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border);
+        border-radius: 1rem; padding: 1rem;
+    }
+    .stack > * + * { margin-top: 1rem; }
+    label.field-label { display: block; font-weight: 600; font-size: 0.9em; margin-bottom: 0.5rem; color: var(--text); }
+    select, input[type="text"], input[type="number"] {
+        width: 100%; padding: 0.5rem 0.75rem; background: rgba(15,23,42,0.5);
+        color: var(--text); border: 1px solid #334155; border-radius: 0.5rem;
+        font-size: 0.9em; outline: none; transition: all 0.2s; font-family: inherit;
+    }
+    select:focus, input:focus { border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(129,140,248,0.2); }
+    select option { background: #1e293b; }
+    select optgroup { font-weight: 700; color: var(--amber); }
+    .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 0.4rem; padding: 0.6rem 1rem; border-radius: 0.5rem;
+        font-weight: 600; font-size: 0.85em; cursor: pointer;
+        border: none; transition: all 0.2s; font-family: inherit;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white;
+        box-shadow: 0 4px 15px rgba(59,130,246,0.3);
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59,130,246,0.5); }
+    .btn-secondary { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .btn-secondary:hover { transform: translateY(-2px); }
+    .btn-purple { background: #9333ea; color: white; }
+    .btn-purple:hover { background: #7e22ce; }
+    .btn-orange { background: #ea580c; color: white; }
+    .btn-orange:hover { background: #c2410c; }
+    .btn-slate { background: #475569; color: white; }
+    .btn-slate:hover { background: #64748b; }
+    .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.75em; }
+    .btn-xs { padding: 0.25rem 0.5rem; font-size: 0.7em; }
+    .btn-block { width: 100%; padding: 0.75rem 1.25rem; font-size: 0.95em; font-weight: 700; }
+    .btn-toggle { background: #334155; color: var(--text-dim); padding: 0.4rem 0.8rem; font-size: 0.8em; }
+    .btn-toggle.active { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .drop-zone {
+        border: 2px dashed #475569; border-radius: 0.75rem;
+        padding: 1.25rem; cursor: pointer; transition: all 0.3s; text-align: center;
+    }
+    .drop-zone:hover { border-color: var(--indigo); }
+    .drop-zone.dragover { background: rgba(99,102,241,0.1); border-color: var(--indigo); transform: scale(1.01); }
+    .drop-zone-icon {
+        display: inline-block; padding: 0.6rem; background: rgba(30,41,59,0.5);
+        border-radius: 50%; margin-bottom: 0.5rem;
+    }
+    .drop-zone-icon svg { width: 2rem; height: 2rem; color: var(--indigo); }
+    .drop-zone h4 { font-size: 0.95em; margin-bottom: 0.25rem; }
+    .drop-zone p { font-size: 0.8em; color: var(--text-dim); }
+    .drop-zone strong { color: var(--indigo); }
+    .crops-header { font-size: 0.8em; color: var(--text-dim); margin-bottom: 0.4rem; }
+    .crops-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .crop-thumb { position: relative; display: inline-block; }
+    .crop-thumb img { height: 3.5rem; border-radius: 0.3rem; border: 1px solid #475569; display: block; }
+    .crop-thumb .del {
+        position: absolute; top: -4px; right: -4px;
+        background: rgba(239,68,68,0.95); color: white;
+        border-radius: 50%; width: 18px; height: 18px;
+        font-size: 0.7rem; display: flex; align-items: center;
+        justify-content: center; cursor: pointer;
+    }
+    .crop-thumb .label {
+        font-size: 0.65rem; color: var(--text-dim); margin-top: 0.2rem;
+        max-width: 70px; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; text-align: center;
+    }
+    .status-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--green); display: inline-block; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .preview-img { max-height: 12rem; border-radius: 0.5rem; margin: 0 auto; display: block; }
+    .thinking-step {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 0.35rem 0; opacity: 0.35; transition: opacity 0.3s;
+    }
+    .thinking-step.active { opacity: 1; }
+    .thinking-step.done { opacity: 0.65; }
+    .thinking-step .step-icon {
+        width: 22px; height: 22px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.7rem; background: var(--bg-1);
+        border: 2px solid #475569; flex-shrink: 0;
+    }
+    .thinking-step.active .step-icon {
+        border-color: var(--blue); background: rgba(96,165,250,0.2);
+        animation: pulse-scale 1.5s infinite;
+    }
+    .thinking-step.done .step-icon { border-color: var(--green); background: rgba(52,211,153,0.2); }
+    @keyframes pulse-scale { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+    .thinking-step span { font-size: 0.85em; }
+    .spinner {
+        border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--blue);
+        border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .obs-card { border-color: rgba(168,85,247,0.3); }
+    .obs-toggle {
+        width: 100%; display: flex; align-items: center; justify-content: space-between;
+        background: none; border: none; color: var(--text); cursor: pointer;
+        font-weight: 700; font-size: 0.95em; font-family: inherit;
+    }
+    .obs-body {
+        display: none; margin-top: 0.75rem; border-top: 1px solid #475569;
+        padding-top: 0.75rem; font-size: 0.85em;
+    }
+    .obs-body.open { display: block; }
+    .result-card { border-color: rgba(99,102,241,0.3); }
+    .md { line-height: 1.7; color: var(--text); }
+    .md h1 { font-size: 1.5em; font-weight: 800; margin: 1rem 0 0.6rem; color: var(--amber); border-bottom: 2px solid rgba(251,191,36,0.3); padding-bottom: 0.3rem; }
+    .md h2 { font-size: 1.25em; font-weight: 700; margin: 1rem 0 0.5rem; color: #f59e0b; }
+    .md h3 { font-size: 1.1em; font-weight: 600; margin: 0.8rem 0 0.4rem; color: var(--blue); }
+    .md h4 { font-size: 1em; font-weight: 600; margin: 0.6rem 0 0.3rem; color: var(--purple); }
+    .md p { margin: 0.5rem 0; }
+    .md ul, .md ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+    .md li { margin: 0.25rem 0; }
+    .md ul { list-style-type: disc; }
+    .md ol { list-style-type: decimal; }
+    .md strong { color: var(--green); font-weight: 700; }
+    .md em { color: var(--amber); font-style: italic; }
+    .md code { background: rgba(15,23,42,0.8); padding: 0.1rem 0.3rem; border-radius: 0.25rem; color: var(--red); font-size: 0.9em; font-family: 'Courier New', monospace; }
+    .md pre { background: #0f172a; padding: 0.8rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.6rem 0; border-left: 3px solid var(--indigo); }
+    .md pre code { background: transparent; color: #e5e7eb; padding: 0; }
+    .md blockquote { border-left: 3px solid var(--amber); padding: 0.4rem 0.8rem; margin: 0.6rem 0; color: #cbd5e1; background: rgba(251,191,36,0.05); }
+    .md table { border-collapse: collapse; width: 100%; margin: 0.6rem 0; background: rgba(15,23,42,0.5); }
+    .md th, .md td { border: 1px solid #475569; padding: 0.5rem 0.6rem; text-align: left; font-size: 0.88em; }
+    .md th { background: rgba(30,41,59,0.8); color: var(--amber); }
+    .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
+    .badge-free { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .badge-paid { background: rgba(251,191,36,0.15); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+    .badge-google { background: rgba(96,165,250,0.15); color: var(--blue); border: 1px solid rgba(96,165,250,0.3); }
+    #map { width: 100%; height: 340px; border-radius: 0.75rem; border: 1px solid rgba(99,102,241,0.3); z-index: 1; }
+    .leaflet-container { background: #1e293b; font-family: inherit; }
+    .leaflet-control-attribution { background: rgba(15,23,42,0.8) !important; color: var(--text-dim) !important; font-size: 0.7em !important; }
+    .leaflet-control-attribution a { color: var(--blue) !important; }
+    .leaflet-control-zoom a { background: rgba(30,41,59,0.9) !important; color: var(--text) !important; border-color: #475569 !important; }
+    .leaflet-control-zoom a:hover { background: #475569 !important; }
+    .flex-row { display: flex; gap: 0.4rem; }
+    .flex-row > * { flex: 1; }
+    .flex-center { display: flex; align-items: center; justify-content: space-between; }
+    .flex-gap { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .flex-wrap { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    .modal-overlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100;
+        display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+        background: #1e293b; border: 1px solid rgba(99,102,241,0.3);
+        border-radius: 1rem; max-width: 95vw; max-height: 95vh;
+        display: flex; flex-direction: column; padding: 1rem;
+        width: 100%; max-width: 900px;
+    }
+    .crop-stage {
+        position: relative; cursor: crosshair; overflow: auto;
+        max-height: 65vh; background: #0f172a; border-radius: 0.5rem;
+    }
+    .crop-stage img { display: block; user-select: none; -webkit-user-drag: none; }
+    .sel-box { position: absolute; border: 2px dashed var(--blue); background: rgba(96,165,250,0.15); pointer-events: none; }
+    .sel-box.hidden { display: none; }
+    .hidden { display: none !important; }
+    .meta-tips { font-size: 0.85em; color: var(--text-dim); }
+    .meta-tips p { margin-bottom: 0.4rem; }
+    .meta-tips strong { color: var(--text); }
+    .text-dim { color: var(--text-dim); }
+    .text-muted { color: var(--text-muted); }
+    .text-xs { font-size: 0.75em; }
+    .quick-loc {
+        padding: 0.25rem 0.4rem; font-size: 0.7rem; background: #1e293b;
+        color: var(--text-dim); border: none; border-radius: 0.25rem;
+        cursor: pointer; font-family: inherit;
+    }
+    .quick-loc:hover { background: #334155; }
+    .engine-hint { font-size: 0.7em; color: var(--text-muted); margin-top: 0.4rem; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="header-badge"><span style="font-size:2em;">🌍</span></div>
+        <h1>GeoGuessr AI Companion</h1>
+        <p>Meta Engine v4.0 · Two-Pass · Leaflet Map · 🔒 Secure Proxy (key aman di server)</p>
+    </div>
+    <div class="warn-box">
+        <span style="font-size:1.25em;">⚠️</span>
+        <div><strong style="color:#f59e0b;">TOS:</strong> Gunakan hanya untuk belajar/meta atau mode solo.</div>
+    </div>
+    <div class="grid-layout">
+        <div class="stack">
+            <div class="glass-card">
+                <div class="flex-center" style="margin-bottom:0.5rem;">
+                    <label class="field-label" style="margin:0;">🤖 Model AI</label>
+                    <span id="modelBadge" class="badge badge-free">✨ Free</span>
+                </div>
+                <select id="modelSelect">
+                    <optgroup label="🌀 GOOGLE GEMINI — Direct Google API">
+                        <option value="gemini-3.7-flash">⚡ Gemini 3.7 Flash (Google Direct)</option>
+                        <option value="gemini-3.6-flash">🌀 Gemini 3.6 Flash (Google Direct)</option>
+                        <option value="gemini-3.5-flash-lite">🪶 Gemini 3.5 Flash Lite (Google Direct)</option>
+                        <option value="gemini-3-flash-preview">🧪 Gemini 3 Flash Preview (Google Direct)</option>
+                        <option value="gemini-3.1-flash-lite-preview">🧪 Gemini 3.1 Flash Lite Preview (Google Direct)</option>
+                    </optgroup>
+                    <optgroup label="🔥 BEST FREE VISION (Xkiro)">
+                        <option value="qwen/qwen3.8-max:free">🧠 Qwen 3.8 Max (Free, 1M)</option>
+                        <option value="qwen/qwen3-vl-plus:free" selected>👁️ Qwen 3 VL Plus (Spesialis Vision)</option>
+                        <option value="qwen/qwen3.5-flash:free">⚡ Qwen 3.5 Flash (Cepat)</option>
+                        <option value="minimax/minimax-m3:free">🚀 MiniMax M3 (Free, 1M)</option>
+                    </optgroup>
+                    <optgroup label="🌪️ Mistral Free (Xkiro)">
+                        <option value="mistralai/mistral-large-2512">🏆 Mistral Large 3</option>
+                        <option value="mistralai/mistral-small-2603">🏃 Mistral Small 4</option>
+                    </optgroup>
+                    <optgroup label="💎 Premium via Xkiro (Butuh Saldo)">
+                        <option value="google/gemini-2.5-pro">🏆 Gemini 2.5 Pro (Xkiro)</option>
+                        <option value="google/gemini-3-flash">⚡ Gemini 3 Flash (Xkiro)</option>
+                    </optgroup>
+                </select>
+                <p class="engine-hint" id="engineHint">🔒 Semua request lewat proxy aman /api/analyze — API key tidak pernah muncul di browser</p>
+                <div class="flex-gap" style="margin-top:0.75rem;">
+                    <span class="text-dim text-xs">Mode:</span>
+                    <button id="modeTwoPass" class="btn btn-toggle active">🔬 Two-Pass (Akurat)</button>
+                    <button id="modeSingle" class="btn btn-toggle">⚡ Single (Cepat)</button>
+                </div>
+            </div>
+            <div class="glass-card">
+                <div class="flex-center" style="margin-bottom:0.5rem;">
+                    <label class="field-label" style="margin:0;">📸 Screenshot</label>
+                    <button id="cropBtn" class="btn btn-purple btn-sm hidden">✂️ Crop / Zoom</button>
+                </div>
+                <div id="dropZone" class="drop-zone">
+                    <div id="uploadPlaceholder">
+                        <div class="drop-zone-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        </div>
+                        <h4>Seret & Lepas atau Klik</h4>
+                        <p><strong>Ctrl+V</strong> untuk paste screenshot</p>
+                    </div>
+                    <div id="previewContainer" class="hidden">
+                        <div class="flex-center" style="margin-bottom:0.5rem;">
+                            <span class="text-xs" style="color:var(--green);"><span class="status-dot"></span> Siap dianalisis</span>
+                            <button id="clearBtn" type="button" class="btn btn-xs" style="background:rgba(239,68,68,0.2);color:#fca5a5;">✕ Hapus</button>
+                        </div>
+                        <img id="imagePreview" class="preview-img" alt="Preview">
+                    </div>
+                </div>
+                <input id="fileInput" type="file" class="hidden" accept="image/*" />
+                <div id="cropsWrap" class="hidden" style="margin-top:0.75rem;">
+                    <p class="crops-header">🔍 Detail Zoom (<span id="cropCount">0</span>):</p>
+                    <div id="cropsList" class="crops-list"></div>
+                </div>
+            </div>
+            <button id="analyzeBtn" class="btn btn-primary btn-block" disabled>
+                <span id="btnIcon">🧠</span><span id="btnText">Analisis Two-Pass</span>
+            </button>
+            <div id="thinkingPanel" class="glass-card hidden">
+                <div class="flex-gap" style="margin-bottom:0.25rem;">
+                    <div class="spinner"></div>
+                    <span id="thinkingTitle" style="font-weight:700;font-size:0.95em;">Chain of Thought</span>
+                </div>
+                <div id="thinkingSteps"></div>
+            </div>
+            <div id="obsContainer" class="glass-card obs-card hidden">
+                <button id="obsToggle" class="obs-toggle">
+                    <span>🕵️ Pass 1 — Observasi Detektif</span>
+                    <span id="obsArrow" style="color:var(--text-dim);">▼</span>
+                </button>
+                <div id="obsBody" class="obs-body md"></div>
+            </div>
+            <div id="resultContainer" class="glass-card result-card hidden">
+                <div class="flex-center" style="margin-bottom:0.75rem;padding-bottom:0.5rem;border-bottom:1px solid #475569;">
+                    <h2 style="font-weight:700;font-size:1em;">🎯 Hasil Akhir</h2>
+                    <span id="resultModel" class="badge badge-free"></span>
+                </div>
+                <div id="resultText" class="md"></div>
+            </div>
+        </div>
+        <div class="stack right-col">
+            <div class="glass-card">
+                <div class="flex-center" style="margin-bottom:0.75rem;">
+                    <h2 style="font-weight:700;font-size:1em;">🗺️ Peta Interaktif</h2>
+                    <span class="text-dim text-xs" id="mapStatus">Klik peta untuk tandai</span>
+                </div>
+                <div class="flex-row" style="margin-bottom:0.5rem;">
+                    <input id="placeSearch" type="text" placeholder="Cari: Paris, Tokyo, Bali...">
+                    <button id="searchPlaceBtn" class="btn btn-primary btn-sm" style="flex:0 0 auto;padding-left:0.8rem;padding-right:0.8rem;">🔎</button>
+                </div>
+                <div class="flex-row" style="margin-bottom:0.5rem;">
+                    <input id="latInput" type="number" step="0.000001" placeholder="Lat (-90 to 90)">
+                    <input id="lngInput" type="number" step="0.000001" placeholder="Lng (-180 to 180)">
+                </div>
+                <div class="flex-row" style="margin-bottom:0.5rem;">
+                    <button id="updateMapBtn" class="btn btn-secondary btn-sm">🎯 Fokus</button>
+                    <button id="openFullMapBtn" class="btn btn-slate btn-sm">🌐 Google Maps</button>
+                </div>
+                <button id="streetViewBtn" class="btn btn-orange btn-sm" style="width:100%;margin-bottom:0.5rem;">👁️ Buka Street View</button>
+                <div id="map"></div>
+                <p class="text-xs text-muted" style="margin-top:0.5rem;">💡 Klik peta untuk taruh marker, atau drag marker untuk geser.</p>
+                <div style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #475569;">
+                    <p class="text-xs text-dim" style="margin-bottom:0.3rem;">🌟 Lokasi Populer:</p>
+                    <div class="flex-wrap">
+                        <button class="quick-loc" data-lat="48.8566" data-lng="2.3522">🇫🇷 Paris</button>
+                        <button class="quick-loc" data-lat="35.6762" data-lng="139.6503">🇯🇵 Tokyo</button>
+                        <button class="quick-loc" data-lat="-6.2088" data-lng="106.8456">🇮🇩 JKT</button>
+                        <button class="quick-loc" data-lat="40.7128" data-lng="-74.0060">🇺🇸 NYC</button>
+                        <button class="quick-loc" data-lat="-22.9068" data-lng="-43.1729">🇧🇷 Rio</button>
+                        <button class="quick-loc" data-lat="55.7558" data-lng="37.6173">🇷🇺 RU</button>
+                        <button class="quick-loc" data-lat="-33.8688" data-lng="151.2093">🇦🇺 Sydney</button>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-card">
+                <h3 style="font-weight:700;font-size:1em;margin-bottom:0.5rem;">💡 Meta Tips</h3>
+                <div id="metaTips" class="meta-tips">
+                    <p>✂️ <strong>Zoom dulu!</strong> Crop plat/bollard/rambu sebelum analisis = akurasi naik drastis.</p>
+                    <p>🔬 Two-Pass lebih lambat tapi jauh lebih akurat.</p>
+                    <p>🔐 <strong>API key tersimpan aman di server Vercel</strong>, tidak terlihat di browser.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="cropModal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <div class="flex-center" style="margin-bottom:0.75rem;">
+            <h3 style="font-weight:700;font-size:1em;">✂️ Crop & Zoom — Drag kotak di area penting</h3>
+            <button id="closeCrop" style="background:none;border:none;color:var(--text-dim);font-size:1.5rem;cursor:pointer;">✕</button>
+        </div>
+        <p class="text-xs text-dim" style="margin-bottom:0.5rem;">💡 Tips: Zoom ke <strong style="color:var(--indigo);">plat nomor, bollard/tiang, rambu jalan, marka jalan</strong>.</p>
+        <div id="cropStage" class="crop-stage">
+            <img id="cropImg" alt="crop">
+            <div id="selBox" class="sel-box hidden"></div>
+        </div>
+        <div class="flex-gap" style="margin-top:0.75rem;">
+            <input id="cropLabel" type="text" placeholder="Label (opsional): plat nomor, bollard..." style="flex:1;">
+            <button id="doCrop" class="btn btn-purple btn-sm" disabled>✂️ Crop</button>
+            <button id="closeCrop2" class="btn btn-slate btn-sm">Selesai</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const dropZone=$('dropZone'), fileInput=$('fileInput'), imagePreview=$('imagePreview'),
+      uploadPlaceholder=$('uploadPlaceholder'), previewContainer=$('previewContainer'),
+      analyzeBtn=$('analyzeBtn'), modelSelect=$('modelSelect'), modelBadge=$('modelBadge'),
+      resultContainer=$('resultContainer'), resultText=$('resultText'), resultModel=$('resultModel'),
+      btnIcon=$('btnIcon'), btnText=$('btnText'), clearBtn=$('clearBtn'),
+      thinkingPanel=$('thinkingPanel'), thinkingSteps=$('thinkingSteps'), thinkingTitle=$('thinkingTitle'),
+      obsContainer=$('obsContainer'), obsBody=$('obsBody'), obsToggle=$('obsToggle'), obsArrow=$('obsArrow'),
+      cropBtn=$('cropBtn'), cropsWrap=$('cropsWrap'), cropsList=$('cropsList'), cropCount=$('cropCount'),
+      latInput=$('latInput'), lngInput=$('lngInput'),
+      updateMapBtn=$('updateMapBtn'), openFullMapBtn=$('openFullMapBtn'), streetViewBtn=$('streetViewBtn'),
+      mapStatus=$('mapStatus'), placeSearch=$('placeSearch'), searchPlaceBtn=$('searchPlaceBtn'),
+      engineHint=$('engineHint');
+
+let base64Image='', crops=[], twoPass=true;
+
+const GOOGLE_MODELS = ['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash-lite','gemini-3-flash-preview','gemini-3.1-flash-lite-preview'];
+const isGoogleModel = m => GOOGLE_MODELS.includes(m);
+
+try {
+    if (typeof marked.use === 'function') marked.use({ breaks:true, gfm:true });
+    else if (typeof marked.setOptions === 'function') marked.setOptions({ breaks:true, gfm:true });
+} catch(e) {}
+
+function renderMD(text){
+    try {
+        const html = typeof marked.parse === 'function' ? marked.parse(text) : (typeof marked === 'function' ? marked(text) : text);
+        return DOMPurify.sanitize(html);
+    } catch(e) { return DOMPurify.sanitize(String(text).replace(/</g,'&lt;')); }
+}
+
+// ============ LEAFLET MAP ============
+const map = L.map('map', { center: [20, 0], zoom: 2, worldCopyJump: true, zoomControl: true });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+let marker = null;
+function setMarker(lat, lng, zoomToMarker = true) {
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    marker.bindPopup(`<b>Lokasi</b><br>Lat: ${lat.toFixed(4)}<br>Lng: ${lng.toFixed(4)}`).openPopup();
+    marker.on('dragend', function(e) {
+        const p = e.target.getLatLng();
+        latInput.value = p.lat.toFixed(6); lngInput.value = p.lng.toFixed(6);
+        mapStatus.textContent = `📍 ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
+    });
+    if (zoomToMarker) map.setView([lat, lng], Math.max(map.getZoom(), 10));
+    latInput.value = lat.toFixed(6); lngInput.value = lng.toFixed(6);
+    mapStatus.textContent = `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+map.on('click', e => setMarker(e.latlng.lat, e.latlng.lng, false));
+
+// ============ PROMPTS ============
+const DETECTIVE_PROMPT = `Kamu adalah DETEKTIF VISUAL forensik. Tugasmu HANYA mendeskripsikan APA YANG LITERAL TERLIHAT di gambar Street View ini.
+
+## ATURAN KETAT
+1. DILARANG menebak negara/lokasi/koordinat.
+2. HANYA laporkan yang BENAR-BENAR terlihat. Kalau blur/tidak yakin → tulis "TIDAK JELAS".
+3. Jangan mengarang.
+4. ABAIKAN semua UI/HUD Google.
+
+## FORMAT LAPORAN:
+### 🛣️ Marka Jalan
+- Garis tengah: [warna + pola, atau TIDAK ADA/TIDAK JELAS]
+- Garis tepi: [ada/tidak]
+- Kondisi aspal: [mulus/rusak/kerikil/tanah]
+### 🚧 Bollard & Tiang
+- Bollard: [ada/tidak, warna, bentuk]
+- Tiang listrik: [kayu/beton/baja]
+### 🚗 Kendaraan
+- Jenis & merek: [...]
+- Posisi setir: [kiri/kanan/TIDAK JELAS]
+- Plat nomor: [warna, format, karakter]
+### 🏠 Bangunan
+- Gaya & material, warna, atap
+### 🌿 Vegetasi & Tanah
+- Jenis pohon, kondisi, warna tanah
+### 🔤 Tulisan & Bahasa
+### ☀️ Cahaya & Langit
+- Arah bayangan, cuaca
+### 🏔️ Medan & Lainnya
+
+Mulai laporanmu.`;
+
+const META_DB = `## 🧠 META DATABASE GEOGUESSR
+### 🛣️ Garis Jalan
+- Tengah PUTIH solid: Eropa Barat (FR,DE,NL,BE), Kanada
+- Tengah KUNING solid: AS, Amerika Latin (BR,AR,CL,CO), Afrika Selatan
+- Double yellow: AS, Kanada
+### 🪧 Plat Nomor
+- Biru+strip EU: Uni Eropa | Putih ABC-1234: Brasil | Kuning/hijau: Jepang | Hitam+putih: India | Biru tua: Afrika Selatan
+### 🚗 Kendaraan
+- VW Gol/Fiat Uno/Onix: Brasil | Toyota/Honda/Nissan: JP,AS | Ford/Chevy/Dodge: AS,Kanada | Peugeot/Renault: Prancis | BMW/Mercedes/VW/Audi: Jerman | Hilux/Ranger: Afrika,AU,LatAm | Tuk-tuk: Asia Tenggara,India | Angkot: Indonesia,Filipina
+### 🏠 Arsitektur
+- Atap hijau/merah+bata: UK,Irlandia | Pastel: NL,BE,IT | Stucco+terracotta: ES,IT,GR,TR | Favela+seng: BR | Beton flat: Eropa Timur,Rusia
+### 🌿 Vegetasi
+- Palem+tropis: BR,ID,TH | Konifer: CA,RU,Skandinavia | Eucalyptus: AU,PT,ES | Tanah merah: BR,ID,Afrika
+### 🔤 Bahasa
+- Latin: EU,Amerika,AU | Cyrillic: RU,UA | Cina: CN | Kana/Kanji: JP | Hangul: KR | Thai: TH | Arab: Timur Tengah
+### 🚦 Infrastruktur
+- Tiang kayu: AS/CA,BR | Tiang beton: EU,ZA,RU | Rambu merah: Eropa | Diamond kuning: AS
+### ☀️ Matahari
+- Bayangan KIRI: belahan SELATAN | Bayangan KANAN: belahan UTARA`;
+
+const ANALYST_PROMPT = `Kamu ANALIS GeoGuessr META ENGINE. Terima LAPORAN OBSERVASI + gambar asli.
+
+${META_DB}
+
+## TUGAS
+Gunakan observasi + meta untuk tentukan lokasi. JANGAN menambah observasi baru.
+
+## CHAIN OF THOUGHT
+1. Cross-reference tiap petunjuk
+2. Top 3 kandidat + eliminasi
+3. Verifikasi konsistensi
+4. Confidence score jujur
+
+## FORMAT OUTPUT (Markdown):
+# 🎯 Prediksi Lokasi
+**Negara:** [nama]
+**Region:** [estimasi]
+**Koordinat:** [lat, lng] (WAJIB angka valid!)
+**Confidence:** [X%] — [🟢HIGH/🟡MEDIUM/🔴LOW]
+
+## 🔬 Reasoning
+### Cross-reference
+### Kandidat & Eliminasi
+### Verifikasi
+
+## 📌 Petunjuk Penentu
+## 💡 Meta Tips
+## 🎲 Alternatif`;
+
+const SINGLE_PROMPT = `Analis GeoGuessr. Analisis gambar, abaikan UI/HUD Google.
+${META_DB}
+Output Markdown:
+# 🎯 Prediksi Lokasi
+**Negara:** / **Region:** / **Koordinat:** [lat,lng] / **Confidence:** [X%]
+## 🔬 Reasoning
+## 📌 Petunjuk Penentu
+## 💡 Meta Tips
+## 🎲 Alternatif`;
+
+// ============ MODEL BADGE ============
+modelSelect.addEventListener('change',()=>{
+    const m=modelSelect.value;
+    if(isGoogleModel(m)){
+        modelBadge.textContent='🌀 Google API';
+        modelBadge.className='badge badge-google';
+        engineHint.textContent='🔒 Request via proxy aman → Google Gemini (key di server)';
+    }else{
+        const free=m.includes(':free')||['mistralai/mistral-large-2512','mistralai/mistral-small-2603'].includes(m);
+        modelBadge.textContent=free?'✨ Free':'💎 Paid';
+        modelBadge.className='badge '+(free?'badge-free':'badge-paid');
+        engineHint.textContent='🔒 Request via proxy aman → Xkiro Gateway (key di server)';
+    }
+});
+modelSelect.dispatchEvent(new Event('change'));
+
+// ============ MODE TOGGLE ============
+$('modeTwoPass').addEventListener('click',()=>{
+    twoPass=true;$('modeTwoPass').classList.add('active');$('modeSingle').classList.remove('active');
+    if(!analyzeBtn.disabled) btnText.textContent='Analisis Two-Pass';
+});
+$('modeSingle').addEventListener('click',()=>{
+    twoPass=false;$('modeSingle').classList.add('active');$('modeTwoPass').classList.remove('active');
+    if(!analyzeBtn.disabled) btnText.textContent='Analisis Single-Pass';
+});
+
+// ============ UPLOAD ============
+dropZone.addEventListener('click',e=>{if(e.target!==clearBtn&&!clearBtn.contains(e.target))fileInput.click();});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files.length)handleFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files.length)handleFile(e.target.files[0]);});
+document.addEventListener('paste',e=>{
+    const items=e.clipboardData?.items; if(!items)return;
+    for(let it of items){
+        if(it.type.indexOf('image')!==-1){
+            handleFile(it.getAsFile());e.preventDefault();
+            dropZone.classList.add('dragover');setTimeout(()=>dropZone.classList.remove('dragover'),300);return;
+        }
+    }
+});
+clearBtn.addEventListener('click',e=>{e.stopPropagation();resetImage();});
+
+function resetImage(){
+    base64Image='';crops=[];fileInput.value='';imagePreview.src='';
+    previewContainer.classList.add('hidden');uploadPlaceholder.classList.remove('hidden');
+    analyzeBtn.disabled=true;cropBtn.classList.add('hidden');cropsWrap.classList.add('hidden');
+    renderCrops();
+}
+
+function handleFile(file){
+    if(!file||!file.type.startsWith('image/')){toast('⚠️ Harus gambar!','error');return;}
+    if(file.size>10*1024*1024){toast('⚠️ Max 10MB!','error');return;}
+    const r=new FileReader();
+    r.onload=ev=>{
+        const img=new Image();
+        img.onload=()=>{
+            const MAX=2560;let w=img.width,h=img.height;
+            if(w>MAX||h>MAX){
+                const s=MAX/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s);
+                const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+                cv.getContext('2d').drawImage(img,0,0,w,h);
+                base64Image=cv.toDataURL('image/jpeg',0.92);
+            }else{ base64Image=ev.target.result; }
+            crops=[];renderCrops();
+            imagePreview.src=base64Image;
+            previewContainer.classList.remove('hidden');uploadPlaceholder.classList.add('hidden');
+            analyzeBtn.disabled=false;cropBtn.classList.remove('hidden');
+            btnText.textContent=twoPass?'Analisis Two-Pass':'Analisis Single-Pass';
+            toast('✅ Gambar siap!','success');
+        };
+        img.onerror=()=>toast('⚠️ Gagal memuat!','error');
+        img.src=ev.target.result;
+    };
+    r.readAsDataURL(file);
+}
+
+function toast(msg,type='info'){
+    const ex=document.getElementById('toast');if(ex)ex.remove();
+    const t=document.createElement('div');t.id='toast';
+    t.style.cssText=`position:fixed;top:1rem;right:1rem;z-index:9999;padding:0.6rem 1rem;border-radius:0.5rem;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:0.875em;font-weight:500;color:white;`;
+    t.style.background=type==='success'?'rgba(16,185,129,0.95)':type==='error'?'rgba(239,68,68,0.95)':'rgba(99,102,241,0.95)';
+    t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
+}
+
+// ============ CROP ============
+const cropModal=$('cropModal'),cropStage=$('cropStage'),cropImg=$('cropImg'),selBox=$('selBox'),doCrop=$('doCrop'),cropLabel=$('cropLabel');
+let sel=null,dragging=false,startX=0,startY=0;
+
+cropBtn.addEventListener('click',()=>{
+    cropImg.src=base64Image;cropModal.classList.remove('hidden');
+    selBox.classList.add('hidden');doCrop.disabled=true;sel=null;
+});
+$('closeCrop').addEventListener('click',closeCropModal);
+$('closeCrop2').addEventListener('click',closeCropModal);
+cropModal.addEventListener('click',e=>{if(e.target===cropModal)closeCropModal();});
+function closeCropModal(){cropModal.classList.add('hidden');dragging=false;selBox.classList.add('hidden');}
+
+cropStage.addEventListener('mousedown',e=>{
+    if(e.target===cropImg||e.target===cropStage){
+        dragging=true;const rect=cropImg.getBoundingClientRect();
+        startX=e.clientX-rect.left;startY=e.clientY-rect.top;
+        selBox.classList.remove('hidden');
+        selBox.style.left=startX+'px';selBox.style.top=startY+'px';
+        selBox.style.width='0';selBox.style.height='0';
+        e.preventDefault();
+    }
+});
+document.addEventListener('mousemove',e=>{
+    if(!dragging||cropModal.classList.contains('hidden'))return;
+    const rect=cropImg.getBoundingClientRect();
+    let x=Math.max(0,Math.min(e.clientX-rect.left,rect.width));
+    let y=Math.max(0,Math.min(e.clientY-rect.top,rect.height));
+    const l=Math.min(startX,x),t=Math.min(startY,y),w=Math.abs(x-startX),h=Math.abs(y-startY);
+    selBox.style.left=l+'px';selBox.style.top=t+'px';
+    selBox.style.width=w+'px';selBox.style.height=h+'px';
+    sel={l,t,w,h};doCrop.disabled=(w<10||h<10);
+});
+document.addEventListener('mouseup',()=>{dragging=false;});
+
+doCrop.addEventListener('click',()=>{
+    if(!sel||sel.w<10||sel.h<10)return;
+    const img=new Image();
+    img.onload=()=>{
+        const sx=img.naturalWidth/cropImg.width, sy=img.naturalHeight/cropImg.height;
+        const cv=document.createElement('canvas');
+        cv.width=Math.max(1,Math.round(sel.w*sx));cv.height=Math.max(1,Math.round(sel.h*sy));
+        cv.getContext('2d').drawImage(img,Math.round(sel.l*sx),Math.round(sel.t*sy),cv.width,cv.height,0,0,cv.width,cv.height);
+        crops.push({data:cv.toDataURL('image/jpeg',0.95),label:cropLabel.value.trim()||`Zoom ${crops.length+1}`});
+        renderCrops();cropLabel.value='';selBox.classList.add('hidden');doCrop.disabled=true;sel=null;
+        toast('✂️ Crop ditambahkan!','success');
+    };
+    img.src=base64Image;
+});
+
+function renderCrops(){
+    cropCount.textContent=crops.length;
+    cropsWrap.classList.toggle('hidden',crops.length===0);
+    cropsList.innerHTML='';
+    crops.forEach((c,i)=>{
+        const d=document.createElement('div');d.className='crop-thumb';
+        d.innerHTML=`<img src="${c.data}"><div class="del" data-i="${i}">✕</div><p class="label">${c.label}</p>`;
+        cropsList.appendChild(d);
+    });
+    cropsList.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>{crops.splice(+b.dataset.i,1);renderCrops();}));
+}
+
+// ============ THINKING ============
+let thinkTimer=null;
+function setSteps(title,labels){
+    thinkingTitle.textContent=title;thinkingPanel.classList.remove('hidden');
+    thinkingSteps.innerHTML=labels.map((l,i)=>`<div class="thinking-step" data-i="${i}"><div class="step-icon">${i+1}</div><span>${l}</span></div>`).join('');
+}
+function runSteps(ms){
+    stopSteps();let cur=0;const steps=thinkingSteps.querySelectorAll('.thinking-step');
+    thinkTimer=setInterval(()=>{
+        if(cur>0&&steps[cur-1]){steps[cur-1].classList.remove('active');steps[cur-1].classList.add('done');}
+        if(cur<steps.length){steps[cur].classList.add('active');cur++;}else stopSteps();
+    },ms);
+}
+function stopSteps(){if(thinkTimer){clearInterval(thinkTimer);thinkTimer=null;}}
+
+obsToggle.addEventListener('click',()=>{obsBody.classList.toggle('open');obsArrow.textContent=obsBody.classList.contains('open')?'▲':'▼';});
+
+// ============ PROXY API CALL (TANPA KEY!) ============
+function buildImageContent(text){
+    const c=[{type:'text',text}];
+    c.push({type:'image_url',image_url:{url:base64Image}});
+    crops.forEach(cr=>{c.push({type:'text',text:`🔍 Detail zoom — "${cr.label}":`});c.push({type:'image_url',image_url:{url:cr.data}});});
+    return c;
+}
+
+async function callAI(systemPrompt,userContent){
+    const model=modelSelect.value;
+    let res;
+    try{
+        res=await fetch('/api/analyze',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({model,systemPrompt,content:userContent})
+        });
+    }catch(e){
+        throw new Error('Tidak bisa hubungi /api/analyze. Aplikasi harus di-deploy di Vercel atau dijalankan via "vercel dev" (tidak bisa double-klik file HTML-nya langsung).');
+    }
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok||!d.ok) throw new Error(d.error||`Server error HTTP ${res.status}`);
+    return d.text;
+}
+
+// ============ ANALYZE ============
+analyzeBtn.addEventListener('click',async()=>{
+    if(!base64Image)return;
+    analyzeBtn.disabled=true;btnIcon.textContent='⏳';btnText.textContent='Meta Engine bekerja...';
+    resultContainer.classList.add('hidden');obsContainer.classList.add('hidden');
+    try{
+        let finalMsg;
+        if(twoPass){
+            btnText.textContent='Pass 1: Detektif mengobservasi...';
+            setSteps('🕵️ Pass 1',['Memindai marka jalan...','Mengecek bollard & tiang...','Mengidentifikasi kendaraan...','Membaca tulisan...','Mencatat vegetasi...']);
+            runSteps(1000);
+            const obs=await callAI(DETECTIVE_PROMPT,buildImageContent('Laporkan SEMUA yang literal kamu lihat.'));
+            stopSteps();
+            obsBody.innerHTML=renderMD(obs);obsContainer.classList.remove('hidden');
+
+            btnText.textContent='Pass 2: Analis menyimpulkan...';
+            setSteps('🎯 Pass 2',['Cross-reference meta...','Menyusun kandidat...','Eliminasi...','Menghitung confidence...','Finalisasi...']);
+            runSteps(1000);
+            finalMsg=await callAI(ANALYST_PROMPT,buildImageContent(`LAPORAN OBSERVASI:\n\n${obs}\n\nBerdasarkan observasi ini + gambar, tentukan lokasi.`));
+            stopSteps();
+        }else{
+            setSteps('⚡ Single-Pass',['Observasi + analisis...','Cross-reference...','Finalisasi...']);
+            runSteps(1200);
+            finalMsg=await callAI(SINGLE_PROMPT,buildImageContent('Analisis lokasi screenshot ini.'));
+            stopSteps();
+        }
+        resultText.innerHTML=renderMD(finalMsg);
+        resultModel.textContent=modelSelect.options[modelSelect.selectedIndex].text;
+        resultContainer.classList.remove('hidden');
+        extractCoords(finalMsg);updateTips(finalMsg);
+        resultContainer.scrollIntoView({behavior:'smooth',block:'start'});
+        toast('✅ Analisis selesai!','success');
+    }catch(err){
+        stopSteps();
+        resultText.innerHTML=`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:0.5rem;padding:0.75rem;color:#fca5a5;"><h3 style="font-weight:700;margin-bottom:0.25rem;">⚠️ Error</h3><p style="font-size:0.85em;"><code>${err.message}</code></p></div>`;
+        resultContainer.classList.remove('hidden');toast('❌ Gagal','error');
+    }finally{
+        stopSteps();thinkingPanel.classList.add('hidden');btnIcon.textContent='🧠';
+        btnText.textContent=twoPass?'Analisis Two-Pass':'Analisis Single-Pass';
+        analyzeBtn.disabled=false;
+    }
+});
+
+// ============ COORD & TIPS ============
+function extractCoords(text){
+    const pats=[
+        /\*\*Koordinat[^:]*:\*\*\s*\[?\s*(-?\d{1,2}\.\d+)\s*[,|]\s*(-?\d{1,3}\.\d+)\s*\]?/i,
+        /(?:lat|latitude)\s*[:=]\s*(-?\d{1,2}\.\d+)[^\d-]{0,10}?(?:lon|lng|longitude)?\s*[:=]?\s*(-?\d{1,3}\.\d+)/i,
+        /(-?\d{1,2}\.\d{2,6})\s*°?\s*[NS]?\s*[,|]\s*(-?\d{1,3}\.\d{2,6})\s*°?\s*[EW]?/i
+    ];
+    for(const p of pats){
+        const m=p.exec(text);
+        if(m){
+            const la=parseFloat(m[1]),lo=parseFloat(m[2]);
+            if(!isNaN(la)&&!isNaN(lo)&&la>=-90&&la<=90&&lo>=-180&&lo<=180){
+                setMarker(la,lo,true);toast('📍 Koordinat terdeteksi!','success');return;
+            }
+        }
+    }
+    const cm=text.match(/\*\*Negara:\*\*\s*([^\n*]+)/i),rm=text.match(/\*\*Region[^:]*:\*\*\s*([^\n*]+)/i);
+    if(cm){
+        placeSearch.value=((rm?rm[1].replace(/\[|\]/g,'')+', ':'')+cm[1].replace(/\[|\]/g,'')).trim();
+        searchPlace();
+    }
+}
+function updateTips(text){
+    const tips=$('metaTips');
+    const km=text.match(/##\s*📌[^\n]*\n([\s\S]*?)(?=\n##|$)/i),tm=text.match(/##\s*💡[^\n]*\n([\s\S]*?)(?=\n##|$)/i);
+    let h='';
+    if(km)h+=`<div style="margin-bottom:0.5rem;"><p style="font-weight:600;color:var(--text);">📌 Petunjuk Penentu:</p>${renderMD(km[1].trim())}</div>`;
+    if(tm)h+=`<div><p style="font-weight:600;color:var(--text);">💡 Tips:</p>${renderMD(tm[1].trim())}</div>`;
+    if(h)tips.innerHTML=h;
+}
+
+// ============ MAP CONTROLS ============
+function updateMap(){
+    const la=parseFloat(latInput.value),lo=parseFloat(lngInput.value);
+    if(isNaN(la)||isNaN(lo)){
+        const p=placeSearch.value.trim();
+        if(p){searchPlace();return;}
+        toast('⚠️ Isi koordinat atau cari lokasi!','error');return;
+    }
+    if(la<-90||la>90||lo<-180||lo>180){toast('⚠️ Koordinat invalid!','error');return;}
+    setMarker(la,lo,true);toast('🎯 Fokus ke koordinat','success');
+}
+function openFullMap(){
+    const la=parseFloat(latInput.value),lo=parseFloat(lngInput.value);
+    if(!isNaN(la)&&!isNaN(lo))window.open(`https://www.google.com/maps/search/?api=1&query=${la},${lo}`,'_blank');
+    else if(placeSearch.value.trim())window.open(`https://www.google.com/maps/search/${encodeURIComponent(placeSearch.value.trim())}`,'_blank');
+    else toast('⚠️ Masukkan lokasi!','error');
+}
+function openStreetView(){
+    const la=parseFloat(latInput.value),lo=parseFloat(lngInput.value);
+    if(isNaN(la)||isNaN(lo)){toast('⚠️ Isi koordinat!','error');return;}
+    window.open(`https://www.google.com/maps/@${la},${lo},3a,75y,0h,90t/data=!3m1!4b1`,'_blank');
+}
+async function searchPlace(){
+    const p=placeSearch.value.trim();
+    if(!p){toast('⚠️ Masukkan lokasi!','error');return;}
+    mapStatus.textContent='🔍 Mencari...';
+    try{
+        const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(p)}&limit=1`);
+        const d=await r.json();
+        if(d.length){
+            const la=parseFloat(d[0].lat),lo=parseFloat(d[0].lon);
+            setMarker(la,lo,true);
+            map.setView([la,lo],13);
+            toast(`✅ ${d[0].display_name.substring(0,50)}...`,'success');
+        }else{toast('❌ Tidak ditemukan','error');mapStatus.textContent='❌';}
+    }catch(e){toast('❌ Error','error');mapStatus.textContent='❌';}
+}
+
+updateMapBtn.addEventListener('click',updateMap);
+openFullMapBtn.addEventListener('click',openFullMap);
+streetViewBtn.addEventListener('click',openStreetView);
+searchPlaceBtn.addEventListener('click',searchPlace);
+placeSearch.addEventListener('keypress',e=>{if(e.key==='Enter')searchPlace();});
+latInput.addEventListener('keypress',e=>{if(e.key==='Enter')updateMap();});
+lngInput.addEventListener('keypress',e=>{if(e.key==='Enter')updateMap();});
+document.querySelectorAll('.quick-loc').forEach(b=>b.addEventListener('click',()=>{
+    setMarker(parseFloat(b.dataset.lat),parseFloat(b.dataset.lng),true);
+}));
+
+setTimeout(()=>map.invalidateSize(),100);
+</script>
+</body>
+</html>

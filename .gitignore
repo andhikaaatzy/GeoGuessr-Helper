@@ -1,0 +1,10 @@
+# JANGAN commit file berisi API key!
+.env
+.env.local
+.env*.local
+
+# Vercel
+.vercel
+
+# Node
+node_modules
