@@ -7,8 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
 <style>
@@ -161,11 +159,9 @@ select optgroup{font-weight:700;color:var(--amber)}
 .badge-google{background:rgba(96,165,250,.1);color:var(--blue);border:1px solid rgba(96,165,250,.2)}
 
 #map{width:100%;height:340px;border-radius:.875rem;border:1px solid rgba(108,92,231,.2);z-index:1;overflow:hidden}
-.leaflet-container{background:var(--bg-1);font-family:inherit}
-.leaflet-control-attribution{background:rgba(10,10,18,.85)!important;color:var(--text-d)!important;font-size:.7em!important;border-radius:0 .5rem 0 0!important}
-.leaflet-control-attribution a{color:var(--purple-l)!important}
-.leaflet-control-zoom a{background:rgba(10,10,18,.85)!important;color:var(--text)!important;border-color:var(--w8)!important;transition:var(--tr)}
-.leaflet-control-zoom a:hover{background:rgba(255,255,255,.08)!important}
+#map iframe{width:100%;height:100%;min-height:340px;border:0;display:block;border-radius:.875rem}
+.gm-key-row{display:flex;gap:.4rem;margin-bottom:.5rem}
+.gm-key-row input{font-size:.75em;padding:.45rem .6rem}
 
 .quick-loc{padding:.25rem .5rem;font-size:.7rem;background:rgba(255,255,255,.04);color:var(--text-d);border:1px solid var(--w6);border-radius:9999px;cursor:pointer;font-family:inherit;transition:var(--tr)}
 .quick-loc:hover{background:rgba(108,92,231,.12);color:var(--purple-l);border-color:rgba(108,92,231,.3);transform:translateY(-1px)}
@@ -211,7 +207,7 @@ select optgroup{font-weight:700;color:var(--amber)}
     <div class="header">
         <div class="header-badge"><span>🌍</span></div>
         <h1>GeoGuessr AI Companion</h1>
-        <p>Meta Engine v4.1 · Two-Pass · Leaflet Map · ⚡Instant Responses ·  Auto-Compress (Anti-413)</p>
+        <p>Meta Engine v4.1 · Two-Pass · Google Maps · ⚡Instant Responses ·  Auto-Compress (Anti-413)</p>
     </div>
     <div class="warn-box">
         <span style="font-size:1.25em;">⚠️</span>
@@ -322,11 +318,15 @@ select optgroup{font-weight:700;color:var(--amber)}
                 </div>
                 <div class="flex-row" style="margin-bottom:0.5rem;">
                     <button id="updateMapBtn" class="btn btn-secondary btn-sm">🎯 Fokus</button>
-                    <button id="openFullMapBtn" class="btn btn-slate btn-sm">🌐 Google Maps</button>
+                    <button id="openFullMapBtn" class="btn btn-slate btn-sm">↗️ Buka Tab</button>
                 </div>
                 <button id="streetViewBtn" class="btn btn-orange btn-sm" style="width:100%;margin-bottom:0.5rem;">👁️ Buka Street View</button>
+                <div class="gm-key-row">
+                    <input id="gmKeyInput" type="text" placeholder="Google Maps API key (opsional)">
+                    <button id="gmKeySave" class="btn btn-slate btn-sm" style="flex:0 0 auto;">🔑</button>
+                </div>
                 <div id="map"></div>
-                <p class="text-xs text-muted" style="margin-top:0.5rem;">💡 Klik peta untuk taruh marker, atau drag marker untuk geser.</p>
+                <p id="mapHint" class="text-xs text-muted" style="margin-top:0.5rem;">💡 Klik peta untuk taruh marker, atau drag marker untuk geser.</p>
                 <div style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid rgba(255,255,255,0.06);">
                     <p class="text-xs text-dim" style="margin-bottom:0.3rem;">🌟 Lokasi Populer:</p>
                     <div class="flex-wrap">
@@ -441,27 +441,88 @@ function updateSizeHint(){
     sizeHint.textContent=`📦 ~${mb} MB terkirim`;
 }
 
-// ============ LEAFLET MAP ============
-const map = L.map('map', { center: [20, 0], zoom: 2, worldCopyJump: true, zoomControl: true });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors', maxZoom: 19
-}).addTo(map);
+// ============ GOOGLE MAPS (JS API bila ada key, fallback embed tanpa key) ============
+const GM_STYLE_DARK=[
+    {elementType:'geometry',stylers:[{color:'#12121e'}]},
+    {elementType:'labels.text.fill',stylers:[{color:'#9aa0a6'}]},
+    {elementType:'labels.text.stroke',stylers:[{color:'#05050a'}]},
+    {featureType:'water',elementType:'geometry',stylers:[{color:'#0d1b2a'}]},
+    {featureType:'road',elementType:'geometry',stylers:[{color:'#1c1c2e'}]},
+    {featureType:'road',elementType:'labels.text.fill',stylers:[{color:'#7d7d8e'}]},
+    {featureType:'poi',elementType:'geometry',stylers:[{color:'#171726'}]},
+    {featureType:'transit',elementType:'geometry',stylers:[{color:'#171726'}]},
+    {featureType:'landscape.natural',elementType:'geometry',stylers:[{color:'#101019'}]}
+];
+let gmap=null,gmarker=null,gmMode='embed';
+let gmKey=localStorage.getItem('gm_api_key')||'';
 
-let marker = null;
-function setMarker(lat, lng, zoomToMarker = true) {
-    if (marker) map.removeLayer(marker);
-    marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-    marker.bindPopup(`<b>Lokasi</b><br>Lat: ${lat.toFixed(4)}<br>Lng: ${lng.toFixed(4)}`).openPopup();
-    marker.on('dragend', function(e) {
-        const p = e.target.getLatLng();
-        latInput.value = p.lat.toFixed(6); lngInput.value = p.lng.toFixed(6);
-        mapStatus.textContent = `📍 ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
-    });
-    if (zoomToMarker) map.setView([lat, lng], Math.max(map.getZoom(), 10));
-    latInput.value = lat.toFixed(6); lngInput.value = lng.toFixed(6);
-    mapStatus.textContent = `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+function renderEmbed(lat,lng,zoom=15){
+    gmMode='embed';
+    $('map').innerHTML=`<iframe src="https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&hl=id&output=embed" loading="lazy" allowfullscreen></iframe>`;
+    $('mapHint').textContent='💡 Embed mode (tanpa API key): atur lokasi via pencarian/koordinat/quick-loc. Isi API key untuk klik-peta & drag marker.';
 }
-map.on('click', e => setMarker(e.latlng.lat, e.latlng.lng, false));
+function loadGMapsAPI(key){
+    return new Promise((resolve,reject)=>{
+        if(window.google&&window.google.maps)return resolve();
+        window.__initGMap=()=>resolve();
+        const s=document.createElement('script');
+        s.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async&callback=__initGMap`;
+        s.async=true;
+        s.onerror=()=>reject(new Error('Gagal memuat Google Maps JS'));
+        document.head.appendChild(s);
+        setTimeout(()=>reject(new Error('Timeout memuat Google Maps JS')),10000);
+    });
+}
+window.gm_authFailure=()=>{
+    if(gmMode==='gmap'){
+        renderEmbed(20,0,2);
+        $('mapStatus').textContent='❌ API key ditolak → embed mode';
+        toast('❌ Google Maps API key invalid — fallback ke embed','error');
+    }
+};
+async function initGMap(lat=20,lng=0,zoom=2){
+    if(!gmKey){
+        renderEmbed(lat,lng,zoom);
+        $('mapStatus').textContent='Embed mode — isi API key untuk klik-peta';
+        return;
+    }
+    $('mapStatus').textContent='⏳ Memuat Google Maps...';
+    try{
+        await loadGMapsAPI(gmKey);
+        gmMode='gmap';
+        $('map').innerHTML='';
+        gmap=new google.maps.Map($('map'),{
+            center:{lat,lng},zoom,styles:GM_STYLE_DARK,
+            mapTypeControl:false,streetViewControl:false,fullscreenControl:false
+        });
+        gmarker=new google.maps.Marker({position:{lat:20,lng:0},map:gmap,draggable:true,visible:false,title:'Lokasi'});
+        gmap.addListener('click',e=>setMarker(e.latLng.lat(),e.latLng.lng(),false));
+        gmarker.addListener('dragend',()=>{
+            const p=gmarker.getPosition();
+            latInput.value=p.lat().toFixed(6);lngInput.value=p.lng().toFixed(6);
+            mapStatus.textContent=`📍 ${p.lat().toFixed(4)}, ${p.lng().toFixed(4)}`;
+        });
+        $('mapHint').textContent='💡 Klik peta untuk taruh marker, atau drag marker untuk geser.';
+        $('mapStatus').textContent='Klik peta untuk tandai';
+    }catch(e){
+        renderEmbed(lat,lng,zoom);
+        $('mapStatus').textContent='Embed mode (Google Maps gagal dimuat)';
+    }
+}
+function setMarker(lat,lng,zoomToMarker=true){
+    latInput.value=lat.toFixed(6);lngInput.value=lng.toFixed(6);
+    mapStatus.textContent=`📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    if(gmMode==='gmap'&&gmap){
+        const pos={lat,lng};
+        gmarker.setPosition(pos);gmarker.setVisible(true);
+        if(zoomToMarker){
+            gmap.setCenter(pos);
+            gmap.setZoom(Math.max(gmap.getZoom(),10));
+        }
+    }else{
+        renderEmbed(lat,lng,zoomToMarker?15:2);
+    }
+}
 
 // ============ PROMPTS ============
 const DETECTIVE_PROMPT = `Kamu adalah DETEKTIF VISUAL forensik. Tugasmu HANYA mendeskripsikan APA YANG LITERAL TERLIHAT di gambar Street View ini.
@@ -851,12 +912,25 @@ async function searchPlace(){
         if(d.length){
             const la=parseFloat(d[0].lat),lo=parseFloat(d[0].lon);
             setMarker(la,lo,true);
-            map.setView([la,lo],13);
             toast(`✅ ${d[0].display_name.substring(0,50)}...`,'success');
         }else{toast('❌ Tidak ditemukan','error');mapStatus.textContent='❌';}
     }catch(e){toast('❌ Error','error');mapStatus.textContent='❌';}
 }
 
+$('gmKeySave').addEventListener('click',()=>{
+    const v=$('gmKeyInput').value.trim();
+    const la=parseFloat(latInput.value),lo=parseFloat(lngInput.value);
+    if(v){
+        gmKey=v;localStorage.setItem('gm_api_key',v);
+        initGMap(isNaN(la)?20:la,isNaN(lo)?0:lo,3);
+        toast('🔑 API key disimpan — memuat Google Maps','success');
+    }else{
+        gmKey='';localStorage.removeItem('gm_api_key');
+        renderEmbed(20,0,2);
+        $('mapStatus').textContent='Embed mode';
+        toast('Key dihapus → embed mode','info');
+    }
+});
 updateMapBtn.addEventListener('click',updateMap);
 openFullMapBtn.addEventListener('click',openFullMap);
 streetViewBtn.addEventListener('click',openStreetView);
@@ -868,7 +942,8 @@ document.querySelectorAll('.quick-loc').forEach(b=>b.addEventListener('click',()
     setMarker(parseFloat(b.dataset.lat),parseFloat(b.dataset.lng),true);
 }));
 
-setTimeout(()=>map.invalidateSize(),100);
+$('gmKeyInput').value=gmKey;
+initGMap(20,0,2);
 </script>
 
 </body>
